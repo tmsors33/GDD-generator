@@ -14,19 +14,5 @@
   ],
   "env": {
     "PYTHONUNBUFFERED": "1"
-  },
-  "excludeFiles": [
-    "chroma_db/**",
-    "__pycache__/**",
-    "*.pyc",
-    "*.pyo",
-    "*.pyd",
-    ".pytest_cache/**",
-    ".coverage",
-    "htmlcov/**",
-    ".git/**",
-    "node_modules/**",
-    "venv/**",
-    "env/**"
-  ]
+  }
 } 
