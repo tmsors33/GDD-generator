@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 from dotenv import load_dotenv
 import warnings
+import importlib
 
 # 지연 로드할 모듈을 위한 변수
 oauth2 = None
@@ -227,35 +228,59 @@ async def upload_document(
             metadata["tags"] = document_tags
         
         # 파일 임시 저장
-        with open(file_path, "wb") as temp_file:
-            content = await document_file.read()
-            temp_file.write(content)
+        try:
+            with open(file_path, "wb") as temp_file:
+                content = await document_file.read()
+                temp_file.write(content)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"파일 저장 중 오류 발생: {str(e)}")
         
-        # 문서 학습
-        documents = document_learner.process_document(file_path, metadata)
-        success = document_learner.add_documents(documents)
-        
-        # 임시 파일 삭제
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        
-        if success:
-            return templates.TemplateResponse(
-                "learn_success.html", 
-                {
-                    "request": request,
-                    "chunks_count": len(documents),
-                    "category": document_category,
-                    "tags": document_tags
-                }
-            )
-        else:
-            raise HTTPException(status_code=500, detail="문서 학습 중 오류가 발생했습니다.")
+        # 문서 학습 시도
+        try:
+            # 필요한 패키지 확인
+            for package in ["langchain", "unstructured", "pypdf", "docx2txt", "langchain-openai", "chromadb"]:
+                try:
+                    importlib.import_module(package.replace("-", "_"))
+                except ImportError:
+                    raise HTTPException(status_code=500, detail=f"필요한 패키지가 설치되어 있지 않습니다: {package}")
             
+            documents = document_learner.process_document(file_path, metadata)
+            if not documents:
+                raise HTTPException(status_code=500, detail="문서에서 처리할 텍스트를 찾을 수 없습니다.")
+                
+            success = document_learner.add_documents(documents)
+            if not success:
+                raise HTTPException(status_code=500, detail="벡터 저장소에 문서 추가 중 오류가 발생했습니다.")
+        except ImportError as e:
+            raise HTTPException(status_code=500, detail=f"필요한 패키지가 설치되어 있지 않습니다: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"문서 처리 중 오류 발생: {str(e)}")
+        finally:
+            # 임시 파일 삭제
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        
+        return templates.TemplateResponse(
+            "learn_success.html", 
+            {
+                "request": request,
+                "chunks_count": len(documents),
+                "category": document_category,
+                "tags": document_tags
+            }
+        )
+            
+    except HTTPException:
+        # 이미 생성된 HTTPException은 그대로 전달
+        raise
     except Exception as e:
         # 오류 발생 시 임시 파일 삭제
         if os.path.exists(file_path):
             os.remove(file_path)
+        # 상세 오류 로깅
+        print(f"문서 업로드 처리 중 예외 발생: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"문서 처리 중 오류 발생: {str(e)}")
 
 @app.post("/learn-text")

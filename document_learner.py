@@ -42,7 +42,10 @@ class DocumentLearner:
             openai.api_key = self.api_key
             
             # 벡터 저장소 초기화는 필요할 때만 수행하기 위해 지연시킵니다
-            self._initialize_if_needed()
+            try:
+                self._initialize_if_needed()
+            except Exception as e:
+                print(f"벡터 저장소 초기화 중 오류 발생: {e}")
     
     def _initialize_if_needed(self):
         """필요할 때만 무거운 모듈을 임포트하고 초기화합니다"""
@@ -66,8 +69,8 @@ class DocumentLearner:
                     except Exception as e:
                         print(f"벡터 저장소 로드 중 오류 발생: {e}")
                         self.vectorstore = None
-            except ImportError:
-                warnings.warn("필요한 패키지가 설치되어 있지 않습니다. 이 기능은 사용할 수 없습니다.")
+            except ImportError as e:
+                warnings.warn(f"필요한 패키지가 설치되어 있지 않습니다: {e}. 이 기능은 사용할 수 없습니다.")
                 self.embedding = None
                 self.vectorstore = None
     
@@ -89,18 +92,33 @@ class DocumentLearner:
         try:
             file_ext = os.path.splitext(file_path)[1].lower()
             
+            # 각 파일 타입별 처리 로직
             if file_ext == '.pdf':
-                from langchain.document_loaders import PyPDFLoader
-                loader = PyPDFLoader(file_path)
+                try:
+                    from langchain.document_loaders import PyPDFLoader
+                    loader = PyPDFLoader(file_path)
+                except ImportError:
+                    print("PyPDFLoader를 로드할 수 없습니다. pypdf 패키지가 설치되어 있는지 확인하세요.")
+                    from langchain.document_loaders import UnstructuredPDFLoader
+                    loader = UnstructuredPDFLoader(file_path)
             elif file_ext == '.txt':
                 from langchain.document_loaders import TextLoader
                 loader = TextLoader(file_path)
             elif file_ext in ['.docx', '.doc']:
-                from langchain.document_loaders import Docx2txtLoader
-                loader = Docx2txtLoader(file_path)
+                try:
+                    from langchain.document_loaders import Docx2txtLoader
+                    loader = Docx2txtLoader(file_path)
+                except ImportError:
+                    print("Docx2txtLoader를 로드할 수 없습니다. docx2txt 패키지가 설치되어 있는지 확인하세요.")
+                    from langchain.document_loaders import UnstructuredFileLoader
+                    loader = UnstructuredFileLoader(file_path)
             elif file_ext in ['.xlsx', '.xls']:
-                from langchain.document_loaders import UnstructuredExcelLoader
-                loader = UnstructuredExcelLoader(file_path)
+                try:
+                    from langchain.document_loaders import UnstructuredExcelLoader
+                    loader = UnstructuredExcelLoader(file_path)
+                except ImportError:
+                    print("UnstructuredExcelLoader를 로드할 수 없습니다. unstructured 패키지가 설치되어 있는지 확인하세요.")
+                    raise ValueError(f"Excel 파일 처리에 필요한 패키지가 설치되어 있지 않습니다.")
             else:
                 raise ValueError(f"지원하지 않는 파일 형식입니다: {file_ext}")
             
@@ -121,9 +139,12 @@ class DocumentLearner:
             )
             
             return text_splitter.split_documents(documents)
-        except ImportError:
-            warnings.warn("필요한 패키지가 설치되어 있지 않습니다. 이 기능은 사용할 수 없습니다.")
-            return []
+        except ImportError as e:
+            print(f"필요한 패키지가 설치되어 있지 않습니다: {e}")
+            raise ImportError(f"문서 처리에 필요한 패키지가 설치되어 있지 않습니다: {e}")
+        except Exception as e:
+            print(f"문서 처리 중 오류 발생: {e}")
+            raise
     
     def add_documents(self, documents: List[Any]) -> bool:
         """
