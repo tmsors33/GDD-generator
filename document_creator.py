@@ -1,95 +1,156 @@
 import os
 import json
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
+# 필요시에만 Google APIs 임포트
+googleapiclient = None
+google_auth = None
+google_auth_oauthlib = None
+google_auth_httplib2 = None
 
 class DocumentCreator:
-    """구글 문서 자동 생성 클래스"""
+    """Google Docs 문서 생성 및 관리 클래스"""
     
-    def __init__(self, credentials_path="token.json"):
+    def __init__(self, token_file, credentials_file=None):
         """
         초기화 함수
         
         Args:
-            credentials_path (str): 인증 정보 파일 경로
+            token_file (str): 토큰 파일 경로
+            credentials_file (str, optional): 자격 증명 파일 경로
         """
-        self.credentials_path = credentials_path
-        self.credentials = self._load_credentials()
-        if self.credentials:
-            self.docs_service = build("docs", "v1", credentials=self.credentials)
-            self.drive_service = build("drive", "v3", credentials=self.credentials)
-        else:
-            self.docs_service = None
-            self.drive_service = None
+        self.token_file = token_file
+        self.credentials_file = credentials_file
+        self.service = None
+        self.creds = None
     
-    def _load_credentials(self):
-        """인증 정보 로드"""
-        if not os.path.exists(self.credentials_path):
-            return None
+    def _initialize_google_apis(self):
+        """Google APIs 동적 로드 및 초기화"""
+        global googleapiclient, google_auth, google_auth_oauthlib, google_auth_httplib2
         
-        with open(self.credentials_path, "r") as token:
-            token_data = json.load(token)
+        if googleapiclient is None:
+            # 필요한 Google APIs 모듈 동적 로드
+            import googleapiclient.discovery
+            import google.auth
+            import google.auth.transport.requests
+            from google_auth_oauthlib.flow import InstalledAppFlow
+            from google.auth.transport.requests import Request
+            import google_auth_httplib2
+            
+            # 전역 변수에 할당
+            googleapiclient = googleapiclient
+            google_auth = google.auth
+            google_auth_oauthlib = google_auth_oauthlib
+            google_auth_httplib2 = google_auth_httplib2
+    
+    def authenticate(self, scopes):
+        """
+        Google API 인증
         
-        return Credentials.from_authorized_user_info(token_data)
+        Args:
+            scopes (list): 인증 범위
+            
+        Returns:
+            bool: 인증 성공 여부
+        """
+        self._initialize_google_apis()
+        
+        try:
+            creds = None
+            # 기존 토큰 파일에서 자격 증명 로드
+            if os.path.exists(self.token_file):
+                with open(self.token_file, 'r') as token:
+                    token_data = json.load(token)
+                    # Vercel에서는 token_data에서 직접 자격 증명 생성
+                    if os.environ.get('VERCEL_ENV'):
+                        from google.oauth2.credentials import Credentials
+                        creds = Credentials.from_authorized_user_info(token_data)
+                    else:
+                        from google.oauth2.credentials import Credentials
+                        creds = Credentials.from_authorized_user_info(token_data, scopes)
+            
+            # 자격 증명이 없거나 유효하지 않은 경우 새로 인증
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    # 토큰 갱신
+                    creds.refresh(Request())
+                elif self.credentials_file:
+                    # 새 인증 흐름 시작
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        self.credentials_file, scopes)
+                    creds = flow.run_local_server(port=0)
+                else:
+                    return False
+                
+                # 토큰 저장
+                with open(self.token_file, 'w') as token:
+                    token.write(creds.to_json())
+            
+            self.creds = creds
+            # Google Docs API 서비스 초기화
+            self.service = googleapiclient.discovery.build('docs', 'v1', credentials=creds)
+            return True
+        
+        except Exception as e:
+            print(f"인증 중 오류 발생: {e}")
+            return False
     
-    def is_authenticated(self):
-        """인증 상태 확인"""
-        return self.credentials is not None
-    
-    def create_document(self, title, content):
+    def create_document(self, title):
         """
         새 문서 생성
         
         Args:
             title (str): 문서 제목
-            content (str): 문서 내용
             
         Returns:
-            dict: 생성된 문서 정보 (id, url)
-            None: 인증되지 않은 경우
+            str: 생성된 문서 ID
         """
-        if not self.is_authenticated():
-            return None
+        if not self.service:
+            raise RuntimeError("API 서비스가 초기화되지 않았습니다. authenticate()를 먼저 호출하세요.")
         
         try:
-            # 새 문서 생성
-            document = self.drive_service.files().create(
-                body={
-                    "name": title,
-                    "mimeType": "application/vnd.google-apps.document"
-                }
-            ).execute()
-            
-            doc_id = document.get("id")
-            
-            # 문서 내용 추가
-            requests = [
-                {
-                    "insertText": {
-                        "location": {
-                            "index": 1
-                        },
-                        "text": content
-                    }
-                }
-            ]
-            
-            self.docs_service.documents().batchUpdate(
-                documentId=doc_id,
-                body={"requests": requests}
-            ).execute()
-            
-            document_url = f"https://docs.google.com/document/d/{doc_id}/edit"
-            
-            return {
-                "id": doc_id,
-                "url": document_url
-            }
-            
+            document = self.service.documents().create(body={'title': title}).execute()
+            print(f'문서가 생성되었습니다: {document.get("title")}')
+            return document.get('documentId')
         except Exception as e:
             print(f"문서 생성 중 오류 발생: {e}")
             return None
     
+    def update_document(self, document_id, updates):
+        """
+        문서 내용 업데이트
+        
+        Args:
+            document_id (str): 문서 ID
+            updates (list): 업데이트 요청 목록
+            
+        Returns:
+            bool: 업데이트 성공 여부
+        """
+        if not self.service:
+            raise RuntimeError("API 서비스가 초기화되지 않았습니다. authenticate()를 먼저 호출하세요.")
+        
+        try:
+            result = self.service.documents().batchUpdate(
+                documentId=document_id, body={'requests': updates}).execute()
+            return True
+        except Exception as e:
+            print(f"문서 업데이트 중 오류 발생: {e}")
+            return False
+    
+    def get_document_link(self, document_id):
+        """
+        문서 링크 생성
+        
+        Args:
+            document_id (str): 문서 ID
+            
+        Returns:
+            str: 문서 링크
+        """
+        return f"https://docs.google.com/document/d/{document_id}/edit"
+        
     def create_document_from_template(self, title, template_data):
         """
         템플릿을 기반으로 문서 생성
@@ -100,128 +161,122 @@ class DocumentCreator:
             
         Returns:
             dict: 생성된 문서 정보 (id, url)
-            None: 인증되지 않은 경우
+            None: 인증 또는 생성 실패 시
         """
-        if not self.is_authenticated():
+        # Google API 인증
+        if not self.service:
+            scopes = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive.file']
+            success = self.authenticate(scopes)
+            if not success:
+                print("Google API 인증에 실패했습니다.")
+                return None
+        
+        try:
+            # 빈 문서 생성
+            doc_id = self.create_document(title)
+            if not doc_id:
+                return None
+            
+            # 템플릿 데이터 기반 문서 내용 생성
+            content = self._format_template_to_doc(template_data)
+            
+            # 문서 내용 업데이트
+            success = self.update_document(doc_id, content)
+            if not success:
+                return None
+            
+            # 문서 URL 생성
+            doc_url = self.get_document_link(doc_id)
+            
+            return {
+                "id": doc_id,
+                "url": doc_url
+            }
+            
+        except Exception as e:
+            print(f"템플릿 기반 문서 생성 중 오류 발생: {e}")
             return None
-        
-        # 템플릿 기반 내용 생성
-        content = self._format_template(template_data)
-        
-        return self.create_document(title, content)
     
-    def _format_template(self, data):
+    def _format_template_to_doc(self, data):
         """
-        템플릿 형식 지정
+        템플릿 데이터를 Google Docs 업데이트 요청으로 변환
         
         Args:
             data (dict): 템플릿 데이터
             
         Returns:
-            str: 형식이 지정된 문서 내용
+            list: Google Docs 업데이트 요청 목록
         """
-        # 여기에 템플릿 형식 지정 로직 구현
-        # 예: 소프트웨어 구현 명세서 템플릿
+        requests = []
+        current_index = 1
         
-        content = f"""# {data.get('title', '소프트웨어 구현 명세서')}
-
-## 1. 요약
-{data.get('summary', '')}
-
-## 2. 요구사항 명세
-### 2.1 기능 요구사항
-{data.get('functional_requirements', '')}
-
-### 2.2 비기능 요구사항
-{data.get('non_functional_requirements', '')}
-
-### 2.3 제약사항 및 가정
-{data.get('constraints_assumptions', '')}
-
-## 3. 시스템 아키텍처
-### 3.1 아키텍처 개요
-{data.get('architecture_overview', '')}
-
-### 3.2 시스템 구성요소
-{data.get('system_components', '')}
-
-## 4. 기술 스택
-### 4.1 개발 환경
-{data.get('development_environment', '')}
-
-### 4.2 백엔드 기술
-{data.get('backend_technology', '')}
-
-### 4.3 프론트엔드 기술
-{data.get('frontend_technology', '')}
-
-### 4.4 인프라 및 배포
-{data.get('infrastructure_deployment', '')}
-
-## 5. 데이터 모델
-### 5.1 엔티티 관계 다이어그램
-{data.get('entity_relationship_diagram', '')}
-
-### 5.2 데이터베이스 스키마
-{data.get('database_schema', '')}
-
-### 5.3 데이터 흐름
-{data.get('data_flow', '')}
-
-## 6. API 명세
-### 6.1 API 개요
-{data.get('api_overview', '')}
-
-### 6.2 엔드포인트 상세
-{data.get('endpoint_details', '')}
-
-## 7. 상세 컴포넌트 설계
-### 7.1 백엔드 컴포넌트
-{data.get('backend_components', '')}
-
-### 7.2 프론트엔드 컴포넌트
-{data.get('frontend_components', '')}
-
-### 7.3 핵심 알고리즘 및 로직
-{data.get('core_algorithms_logic', '')}
-
-## 8. 보안 설계
-### 8.1 보안 위협 분석
-{data.get('security_threat_analysis', '')}
-
-### 8.2 보안 통제
-{data.get('security_controls', '')}
-
-## 9. 테스트 전략
-### 9.1 테스트 접근법
-{data.get('test_approach', '')}
-
-### 9.2 테스트 케이스
-{data.get('test_cases', '')}
-
-## 10. 구현 로드맵
-### 10.1 개발 단계
-{data.get('development_phases', '')}
-
-## 11. 개발 가이드라인
-### 11.1 개발 표준
-{data.get('development_standards', '')}
-
-### 11.2 문서화 요구사항
-{data.get('documentation_requirements', '')}
-
-## 12. 부록
-### 12.1 용어 설명
-{data.get('glossary', '')}
-
-### 12.2 참조 문서
-{data.get('reference_documents', '')}
-
-## 13. 구현 완료 상태 평가
-### 13.1 요구사항 구현 검증
-{data.get('requirements_implementation_verification', '')}
-
-### 13.2 구현 상태 결론
-{data.get('implementation_status_conclusion', '')}
-"""
-        return content 
+        # 문서 제목 삽입
+        title = data.get('title', '소프트웨어 구현 명세서')
+        requests.append({
+            'insertText': {
+                'location': {'index': current_index},
+                'text': f"# {title}\n\n"
+            }
+        })
+        current_index += len(f"# {title}\n\n")
+        
+        # 각 섹션 삽입
+        sections = [
+            ('summary', '## 1. 요약'),
+            ('functional_requirements', '### 2.1 기능 요구사항'),
+            ('non_functional_requirements', '### 2.2 비기능 요구사항'),
+            ('constraints_assumptions', '### 2.3 제약사항 및 가정'),
+            ('architecture_overview', '### 3.1 아키텍처 개요'),
+            ('system_components', '### 3.2 시스템 구성요소'),
+            ('development_environment', '### 4.1 개발 환경'),
+            ('backend_technology', '### 4.2 백엔드 기술'),
+            ('frontend_technology', '### 4.3 프론트엔드 기술'),
+            ('infrastructure_deployment', '### 4.4 인프라 및 배포'),
+            ('entity_relationship_diagram', '### 5.1 엔티티 관계 다이어그램'),
+            ('database_schema', '### 5.2 데이터베이스 스키마'),
+            ('data_flow', '### 5.3 데이터 흐름'),
+            ('api_overview', '### 6.1 API 개요'),
+            ('endpoint_details', '### 6.2 엔드포인트 상세'),
+            ('backend_components', '### 7.1 백엔드 컴포넌트'),
+            ('frontend_components', '### 7.2 프론트엔드 컴포넌트'),
+            ('core_algorithms_logic', '### 7.3 핵심 알고리즘 및 로직'),
+            ('security_threat_analysis', '### 8.1 보안 위협 분석'),
+            ('security_controls', '### 8.2 보안 통제'),
+            ('test_approach', '### 9.1 테스트 접근법'),
+            ('test_cases', '### 9.2 테스트 케이스'),
+            ('development_phases', '### 10.1 개발 단계'),
+            ('development_standards', '### 11.1 개발 표준'),
+            ('documentation_requirements', '### 11.2 문서화 요구사항'),
+            ('glossary', '### 12.1 용어 설명'),
+            ('reference_documents', '### 12.2 참조 문서'),
+            ('requirements_implementation_verification', '### 13.1 요구사항 구현 검증'),
+            ('implementation_status_conclusion', '### 13.2 구현 상태 결론')
+        ]
+        
+        for key, header in sections:
+            content = data.get(key, '')
+            section_text = f"{header}\n{content}\n\n"
+            requests.append({
+                'insertText': {
+                    'location': {'index': current_index},
+                    'text': section_text
+                }
+            })
+            current_index += len(section_text)
+        
+        # 스타일 적용 (제목)
+        requests.append({
+            'updateParagraphStyle': {
+                'range': {
+                    'startIndex': 1,
+                    'endIndex': len(f"# {title}") + 1
+                },
+                'paragraphStyle': {
+                    'namedStyleType': 'TITLE',
+                    'alignment': 'CENTER'
+                },
+                'fields': 'namedStyleType,alignment'
+            }
+        })
+        
+        return requests 

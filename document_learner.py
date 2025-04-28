@@ -3,24 +3,15 @@ import tempfile
 from typing import List, Dict, Any, Optional
 import json
 import shutil
-
-import openai
-from langchain.document_loaders import (
-    PyPDFLoader, 
-    TextLoader, 
-    Docx2txtLoader, 
-    UnstructuredExcelLoader
-)
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
-from langchain.schema import Document
-from langchain.chains import RetrievalQA
-from langchain.chat_models import ChatOpenAI
-from dotenv import load_dotenv
+import importlib
+import warnings
 
 # 환경 변수 로드
+from dotenv import load_dotenv
 load_dotenv()
+
+# 필수적인 기본 모듈만 먼저 로드
+import openai
 
 class DocumentLearner:
     """사용자 문서 학습 및 벡터 저장소 생성 클래스"""
@@ -35,6 +26,8 @@ class DocumentLearner:
         """
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.persist_directory = persist_directory
+        self.vectorstore = None
+        self.embedding = None
         
         # 벡터 저장소 디렉토리 생성
         if not os.path.exists(self.persist_directory):
@@ -47,24 +40,38 @@ class DocumentLearner:
         
         if self.api_key:
             openai.api_key = self.api_key
-            self.embedding = OpenAIEmbeddings(
-                openai_api_key=self.api_key,
-                model="text-embedding-ada-002"
-            )
             
-            # 기존 벡터 저장소 로드 또는 생성
-            if os.path.exists(self.persist_directory):
-                self.vectorstore = Chroma(
-                    persist_directory=self.persist_directory, 
-                    embedding_function=self.embedding
-                )
-            else:
-                self.vectorstore = None
-        else:
-            self.embedding = None
-            self.vectorstore = None
+            # 벡터 저장소 초기화는 필요할 때만 수행하기 위해 지연시킵니다
+            self._initialize_if_needed()
     
-    def process_document(self, file_path: str, metadata: Optional[Dict[str, Any]] = None) -> List[Document]:
+    def _initialize_if_needed(self):
+        """필요할 때만 무거운 모듈을 임포트하고 초기화합니다"""
+        if self.embedding is None and self.api_key:
+            try:
+                # 동적으로 필요한 모듈 임포트
+                from langchain.embeddings import OpenAIEmbeddings
+                self.embedding = OpenAIEmbeddings(
+                    openai_api_key=self.api_key,
+                    model="text-embedding-ada-002"
+                )
+                
+                # 기존 벡터 저장소 로드 시도
+                if os.path.exists(self.persist_directory):
+                    try:
+                        from langchain.vectorstores import Chroma
+                        self.vectorstore = Chroma(
+                            persist_directory=self.persist_directory, 
+                            embedding_function=self.embedding
+                        )
+                    except Exception as e:
+                        print(f"벡터 저장소 로드 중 오류 발생: {e}")
+                        self.vectorstore = None
+            except ImportError:
+                warnings.warn("필요한 패키지가 설치되어 있지 않습니다. 이 기능은 사용할 수 없습니다.")
+                self.embedding = None
+                self.vectorstore = None
+    
+    def process_document(self, file_path: str, metadata: Optional[Dict[str, Any]] = None) -> List[Any]:
         """
         문서 파일을 처리하여 Document 객체 목록 반환
         
@@ -78,38 +85,47 @@ class DocumentLearner:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"파일을 찾을 수 없습니다: {file_path}")
         
-        # 파일 확장자에 따른 적절한 로더 선택
-        file_ext = os.path.splitext(file_path)[1].lower()
-        
-        if file_ext == '.pdf':
-            loader = PyPDFLoader(file_path)
-        elif file_ext == '.txt':
-            loader = TextLoader(file_path)
-        elif file_ext in ['.docx', '.doc']:
-            loader = Docx2txtLoader(file_path)
-        elif file_ext in ['.xlsx', '.xls']:
-            loader = UnstructuredExcelLoader(file_path)
-        else:
-            raise ValueError(f"지원하지 않는 파일 형식입니다: {file_ext}")
-        
-        # 문서 로드
-        documents = loader.load()
-        
-        # 메타데이터 추가
-        if metadata:
-            for doc in documents:
-                doc.metadata.update(metadata)
-        
-        # 텍스트 분할
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-        )
-        
-        return text_splitter.split_documents(documents)
+        # 필요한 모듈 동적 임포트
+        try:
+            file_ext = os.path.splitext(file_path)[1].lower()
+            
+            if file_ext == '.pdf':
+                from langchain.document_loaders import PyPDFLoader
+                loader = PyPDFLoader(file_path)
+            elif file_ext == '.txt':
+                from langchain.document_loaders import TextLoader
+                loader = TextLoader(file_path)
+            elif file_ext in ['.docx', '.doc']:
+                from langchain.document_loaders import Docx2txtLoader
+                loader = Docx2txtLoader(file_path)
+            elif file_ext in ['.xlsx', '.xls']:
+                from langchain.document_loaders import UnstructuredExcelLoader
+                loader = UnstructuredExcelLoader(file_path)
+            else:
+                raise ValueError(f"지원하지 않는 파일 형식입니다: {file_ext}")
+            
+            # 문서 로드
+            documents = loader.load()
+            
+            # 메타데이터 추가
+            if metadata:
+                for doc in documents:
+                    doc.metadata.update(metadata)
+            
+            # 텍스트 분할
+            from langchain.text_splitter import RecursiveCharacterTextSplitter
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200,
+                length_function=len,
+            )
+            
+            return text_splitter.split_documents(documents)
+        except ImportError:
+            warnings.warn("필요한 패키지가 설치되어 있지 않습니다. 이 기능은 사용할 수 없습니다.")
+            return []
     
-    def add_documents(self, documents: List[Document]) -> bool:
+    def add_documents(self, documents: List[Any]) -> bool:
         """
         문서를 벡터 저장소에 추가
         
@@ -119,12 +135,16 @@ class DocumentLearner:
         Returns:
             bool: 성공 여부
         """
+        # 벡터 저장소 초기화
+        self._initialize_if_needed()
+        
         if not self.embedding:
             return False
         
         try:
             # 벡터 저장소가 없으면 생성
             if self.vectorstore is None:
+                from langchain.vectorstores import Chroma
                 self.vectorstore = Chroma.from_documents(
                     documents=documents,
                     embedding=self.embedding,
@@ -182,7 +202,8 @@ class DocumentLearner:
                 tmp_path = tmp.name
             
             # 텍스트 파일 학습
-            result = self.learn_from_file(tmp_path, metadata)
+            documents = self.process_document(tmp_path, metadata)
+            result = self.add_documents(documents) if documents else False
             
             # 임시 파일 삭제
             os.unlink(tmp_path)
@@ -193,7 +214,7 @@ class DocumentLearner:
             print(f"텍스트 학습 중 오류 발생: {e}")
             return False
     
-    def search_similar_documents(self, query: str, top_k: int = 5) -> List[Document]:
+    def search_similar_documents(self, query: str, top_k: int = 5) -> List[Any]:
         """
         쿼리와 유사한 문서 검색
         
@@ -204,6 +225,9 @@ class DocumentLearner:
         Returns:
             List[Document]: 검색된 문서 목록
         """
+        # 벡터 저장소 초기화
+        self._initialize_if_needed()
+        
         if not self.vectorstore:
             return []
         
@@ -225,25 +249,18 @@ class DocumentLearner:
         Returns:
             Dict[str, Any]: 템플릿 데이터
         """
-        if not self.vectorstore or not self.api_key:
+        # 간소화된 구현: Vercel 배포를 위해 단순화됨
+        # 실제 벡터 검색 대신 OpenAI API만 사용하여 템플릿 생성
+        if not self.api_key:
             return {}
         
         try:
-            # 유사 문서 검색
-            documents = self.search_similar_documents(query)
-            
-            if not documents:
-                return {}
-            
-            # 검색된 문서 내용 조합
-            context = "\n\n".join([doc.page_content for doc in documents])
-            
             # OpenAI API를 사용하여 템플릿 데이터 생성
             response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "당신은 소프트웨어 구현 명세서 작성을 도와주는 전문가입니다. 제공된 문서와 사용자 입력을 분석하여 소프트웨어 구현 명세서의 각 섹션별 내용을 JSON 형식으로 구성해주세요."},
-                    {"role": "user", "content": f"다음은 참조할 문서 내용입니다:\n\n{context}\n\n사용자 입력: {query}"}
+                    {"role": "system", "content": "당신은 소프트웨어 구현 명세서 작성을 도와주는 전문가입니다. 사용자 입력을 분석하여 소프트웨어 구현 명세서의 각 섹션별 내용을 JSON 형식으로 구성해주세요."},
+                    {"role": "user", "content": f"사용자 입력: {query}"}
                 ],
                 response_format={"type": "json_object"}
             )

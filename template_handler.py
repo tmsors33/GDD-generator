@@ -1,11 +1,13 @@
 import re
 import os
 import json
-import openai
 from dotenv import load_dotenv
 
 # 환경 변수 로드
 load_dotenv()
+
+# 필요시에만 OpenAI 임포트
+openai = None
 
 class TemplateHandler:
     """문서 템플릿 처리 클래스"""
@@ -18,8 +20,6 @@ class TemplateHandler:
             api_key (str, optional): OpenAI API 키 (없으면 환경 변수에서 로드)
         """
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        if self.api_key:
-            openai.api_key = self.api_key
     
     def parse_user_input(self, user_input):
         """
@@ -52,6 +52,12 @@ class TemplateHandler:
             dict: 템플릿 데이터
         """
         try:
+            # 필요시에만 OpenAI 모듈 로드
+            global openai
+            if openai is None:
+                import openai
+                openai.api_key = self.api_key
+                
             response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[

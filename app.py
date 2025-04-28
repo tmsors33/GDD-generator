@@ -5,17 +5,15 @@ from fastapi import FastAPI, Request, Form, Depends, HTTPException, File, Upload
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.security import OAuth2AuthorizationCodeBearer
 import uvicorn
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
-from googleapiclient.discovery import build
 from dotenv import load_dotenv
+import warnings
 
-# 사용자 정의 모듈 임포트
-from document_creator import DocumentCreator
-from template_handler import TemplateHandler
-from document_learner import DocumentLearner
+# 지연 로드할 모듈을 위한 변수
+oauth2 = None
+google_auth = None
+google_oauth = None
+google_discovery = None
 
 # 환경 변수 로드
 load_dotenv()
@@ -25,7 +23,7 @@ app = FastAPI(title="구글 드라이브 문서 자동 생성기")
 # 디렉토리 생성 (Vercel 환경을 위한 수정)
 for directory in ["templates", "static", "static/css", "static/js", "chroma_db"]:
     if not os.path.exists(directory):
-        os.makedirs(directory)
+        os.makedirs(directory, exist_ok=True)
 
 # 템플릿 및 정적 파일 설정
 templates = Jinja2Templates(directory="templates")
@@ -43,14 +41,54 @@ if os.getenv("VERCEL_ENV"):
     # Vercel 환경에서는 /tmp 디렉토리 사용
     TOKEN_FILE = "/tmp/token.json"
 
-# 템플릿 처리기 및 문서 생성기 초기화
+# 필수 모듈 먼저 로드
+from template_handler import TemplateHandler
 template_handler = TemplateHandler()
-document_creator = DocumentCreator(TOKEN_FILE)
-document_learner = DocumentLearner(persist_directory="/tmp/chroma_db" if os.getenv("VERCEL_ENV") else "chroma_db")
+
+# 무거운 모듈은 필요할 때만 로드
+document_creator = None
+document_learner = None
+
+def get_document_creator():
+    """문서 생성기 지연 로드"""
+    global document_creator
+    if document_creator is None:
+        from document_creator import DocumentCreator
+        document_creator = DocumentCreator(TOKEN_FILE)
+    return document_creator
+
+def get_document_learner():
+    """문서 학습기 지연 로드"""
+    global document_learner
+    if document_learner is None:
+        try:
+            from document_learner import DocumentLearner
+            document_learner = DocumentLearner(persist_directory="/tmp/chroma_db" if os.getenv("VERCEL_ENV") else "chroma_db")
+        except ImportError:
+            warnings.warn("DocumentLearner를 로드할 수 없습니다. 관련 기능이 비활성화됩니다.")
+            document_learner = None
+    return document_learner
+
+def _load_google_auth_modules():
+    """Google 인증 관련 모듈 동적 로드"""
+    global oauth2, google_auth, google_oauth, google_discovery
+    
+    if oauth2 is None:
+        from fastapi.security import OAuth2AuthorizationCodeBearer
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import Flow
+        from googleapiclient.discovery import build
+        
+        oauth2 = OAuth2AuthorizationCodeBearer
+        google_auth = Credentials
+        google_oauth = Flow
+        google_discovery = build
 
 def create_flow():
     """OAuth 인증 흐름 생성"""
-    flow = Flow.from_client_config(
+    _load_google_auth_modules()
+    
+    flow = google_oauth.from_client_config(
         {
             "web": {
                 "client_id": CLIENT_ID,
@@ -67,13 +105,15 @@ def create_flow():
 
 def get_credentials():
     """저장된 토큰에서 사용자 인증 정보 가져오기"""
+    _load_google_auth_modules()
+    
     if not os.path.exists(TOKEN_FILE):
         return None
     
     with open(TOKEN_FILE, "r") as token:
         token_data = json.load(token)
     
-    return Credentials.from_authorized_user_info(token_data)
+    return google_auth.from_authorized_user_info(token_data)
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -120,15 +160,16 @@ async def create_document(
     if not credentials:
         return RedirectResponse("/login")
     
-    # 문서 생성기 초기화
-    document_creator = DocumentCreator(TOKEN_FILE)
+    # 문서 생성기 로드
+    document_creator = get_document_creator()
     
     # 학습된 데이터 사용 여부 확인
     use_learned = use_learned_data == "true"
     template_data = {}
     reference_count = 0
     
-    if use_learned and document_learner.vectorstore:
+    document_learner = get_document_learner()
+    if use_learned and document_learner and document_learner.vectorstore:
         # 학습된 데이터 기반 템플릿 생성
         template_data = document_learner.generate_template_from_query(document_content)
         
@@ -171,6 +212,11 @@ async def upload_document(
     document_tags: Optional[str] = Form(None)
 ):
     """문서 파일 업로드 및 학습"""
+    # 문서 학습기 로드
+    document_learner = get_document_learner()
+    if document_learner is None:
+        raise HTTPException(status_code=500, detail="문서 학습 기능을 사용할 수 없습니다.")
+    
     # 임시 파일로 저장
     file_path = f"temp_{document_file.filename}"
     
@@ -220,6 +266,11 @@ async def learn_text(
     text_tags: Optional[str] = Form(None)
 ):
     """텍스트 직접 입력하여 학습"""
+    # 문서 학습기 로드
+    document_learner = get_document_learner()
+    if document_learner is None:
+        raise HTTPException(status_code=500, detail="문서 학습 기능을 사용할 수 없습니다.")
+    
     try:
         # 메타데이터 준비
         metadata = {"category": text_category}
@@ -251,6 +302,11 @@ async def learn_text(
 @app.post("/clear-learned-data")
 async def clear_learned_data(request: Request):
     """학습된 데이터 모두 삭제"""
+    # 문서 학습기 로드
+    document_learner = get_document_learner()
+    if document_learner is None:
+        raise HTTPException(status_code=500, detail="문서 학습 기능을 사용할 수 없습니다.")
+    
     success = document_learner.clear_vectorstore()
     
     if success:
