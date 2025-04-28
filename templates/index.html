@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>구글 드라이브 문서 자동 생성기</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>구글 드라이브 문서 자동 생성기</h1>
+            <p>원하는 문서 방향성을 입력하면 자동으로 구글 드라이브에 문서가 생성됩니다.</p>
+        </header>
+        
+        <nav class="main-nav">
+            <ul>
+                <li><a href="/" class="active">홈</a></li>
+                <li><a href="/learn">문서 학습</a></li>
+                <li><a href="/about">소개</a></li>
+            </ul>
+        </nav>
+        
+        <main>
+            <form action="/create-document" method="post" class="document-form">
+                <div class="form-group">
+                    <label for="document_title">문서 제목</label>
+                    <input type="text" id="document_title" name="document_title" required placeholder="문서 제목을 입력하세요">
+                </div>
+                
+                <div class="form-group">
+                    <label for="document_content">문서 내용 및 방향성</label>
+                    <textarea id="document_content" name="document_content" rows="10" required placeholder="문서의 내용과 원하는 방향성을 자세히 설명해주세요.&#10;예: 프로젝트 제안서, 주간 보고서, 회의록 등"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="use_learned_data">
+                        <input type="checkbox" id="use_learned_data" name="use_learned_data" value="true" checked>
+                        학습된 문서 참조하기
+                    </label>
+                    <small>이 옵션을 선택하면 이전에 학습된 문서를 참조하여 더 관련성 높은 템플릿을 생성합니다.</small>
+                </div>
+                
+                <button type="submit" class="btn-create">문서 생성하기</button>
+            </form>
+            
+            <div class="login-section">
+                <a href="/login" class="btn-login">구글 계정으로 로그인</a>
+                <a href="/logout" class="btn-logout">로그아웃</a>
+            </div>
+        </main>
+        
+        <footer>
+            <p>&copy; 2023 구글 드라이브 문서 자동 생성기</p>
+        </footer>
+    </div>
+    
+    <script src="{{ url_for('static', path='js/script.js') }}"></script>
+</body>
+</html> 

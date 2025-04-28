@@ -1,0 +1,23 @@
+# 환경 변수 및 보안 정보
+.env
+token.json
+
+# 벡터 데이터베이스
+chroma_db/
+
+# 캐시 파일
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 가상 환경
+venv/
+env/
+ENV/
+
+# 시스템 파일
+.DS_Store
+Thumbs.db
+
+# 임시 파일
+temp_* 

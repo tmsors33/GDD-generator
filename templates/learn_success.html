@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학습 완료 - 구글 드라이브 문서 자동 생성기</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>문서 학습 완료</h1>
+        </header>
+        
+        <nav class="main-nav">
+            <ul>
+                <li><a href="/">홈</a></li>
+                <li><a href="/learn" class="active">문서 학습</a></li>
+                <li><a href="/about">소개</a></li>
+            </ul>
+        </nav>
+        
+        <main class="success-main">
+            <div class="success-card">
+                <div class="success-icon">✅</div>
+                <h2>문서가 성공적으로 학습되었습니다!</h2>
+                <p>문서가 시스템에 추가되었으며, 이제 템플릿 생성 시 참조됩니다.</p>
+                
+                <div class="stats-box">
+                    <h3>학습 정보</h3>
+                    <ul>
+                        <li><strong>처리된 청크:</strong> {{ chunks_count }}</li>
+                        <li><strong>카테고리:</strong> {{ category }}</li>
+                        {% if tags %}
+                        <li><strong>태그:</strong> {{ tags }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+                
+                <div class="action-links">
+                    <a href="/learn" class="btn-view-doc">추가 문서 학습하기</a>
+                    <a href="/" class="btn-back">메인 페이지로 돌아가기</a>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>&copy; 2023 구글 드라이브 문서 자동 생성기</p>
+        </footer>
+    </div>
+</body>
+</html> 

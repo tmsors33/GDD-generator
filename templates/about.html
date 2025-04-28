@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>소개 - 구글 드라이브 문서 자동 생성기</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>소개</h1>
+            <p>구글 드라이브 문서 자동 생성기에 대한 정보</p>
+        </header>
+        
+        <nav class="main-nav">
+            <ul>
+                <li><a href="/">홈</a></li>
+                <li><a href="/learn">문서 학습</a></li>
+                <li><a href="/about" class="active">소개</a></li>
+            </ul>
+        </nav>
+        
+        <main class="about-main">
+            <section class="about-section">
+                <h2>서비스 소개</h2>
+                <p>구글 드라이브 문서 자동 생성기는 사용자가 입력한 문서 방향성에 따라 자동으로 구글 드라이브에 구글 독스 문서를 생성하는 애플리케이션입니다. 인공지능 기술을 활용하여 사용자가 원하는 방향성을 분석하고, 학습된 문서 데이터를 참조하여 더 관련성 높은 문서를 생성합니다.</p>
+            </section>
+            
+            <section class="about-section">
+                <h2>주요 기능</h2>
+                <ul>
+                    <li><strong>문서 자동 생성:</strong> 사용자 입력을 바탕으로 구글 드라이브에 문서 자동 생성</li>
+                    <li><strong>문서 학습:</strong> 기존 문서를 시스템에 학습시켜 템플릿 생성 품질 향상</li>
+                    <li><strong>인공지능 분석:</strong> OpenAI API를 활용한 텍스트 분석 및 구조화</li>
+                    <li><strong>안전한 접근:</strong> 구글 OAuth 인증을 통한 안전한 드라이브 접근</li>
+                </ul>
+            </section>
+            
+            <section class="about-section">
+                <h2>문서 학습 시스템</h2>
+                <p>문서 학습 시스템은 사용자가 업로드한 문서를 분석하여 벡터 데이터베이스에 저장합니다. 이렇게 학습된 데이터는 새로운 문서 생성 시 참조되어, 사용자의 기존 문서 스타일과 내용을 반영한 더 관련성 높은 문서를 생성할 수 있도록 도와줍니다.</p>
+                
+                <h3>지원 파일 형식</h3>
+                <ul>
+                    <li>PDF 파일 (.pdf)</li>
+                    <li>Word 문서 (.docx, .doc)</li>
+                    <li>텍스트 파일 (.txt)</li>
+                    <li>Excel 파일 (.xlsx, .xls)</li>
+                </ul>
+            </section>
+            
+            <section class="about-section">
+                <h2>사용 기술</h2>
+                <ul>
+                    <li><strong>백엔드:</strong> FastAPI, Python</li>
+                    <li><strong>AI 서비스:</strong> OpenAI API, LangChain</li>
+                    <li><strong>벡터 저장소:</strong> ChromaDB</li>
+                    <li><strong>문서 처리:</strong> Google Drive API, Google Docs API</li>
+                    <li><strong>인증:</strong> Google OAuth 2.0</li>
+                </ul>
+            </section>
+        </main>
+        
+        <footer>
+            <p>&copy; 2023 구글 드라이브 문서 자동 생성기</p>
+        </footer>
+    </div>
+</body>
+</html> 

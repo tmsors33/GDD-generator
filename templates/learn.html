@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>문서 학습 - 구글 드라이브 문서 자동 생성기</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>문서 학습</h1>
+            <p>이전 문서를 시스템에 학습시켜 템플릿 생성 품질을 향상시킵니다.</p>
+        </header>
+        
+        <nav class="main-nav">
+            <ul>
+                <li><a href="/">홈</a></li>
+                <li><a href="/learn" class="active">문서 학습</a></li>
+                <li><a href="/about">소개</a></li>
+            </ul>
+        </nav>
+        
+        <main>
+            <div class="learn-section">
+                <h2>파일 업로드</h2>
+                <form action="/upload-document" method="post" enctype="multipart/form-data" class="document-form">
+                    <div class="form-group">
+                        <label for="document_file">문서 파일 선택</label>
+                        <input type="file" id="document_file" name="document_file" required>
+                        <small>지원 형식: PDF, DOCX, TXT, XLSX</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="document_category">문서 카테고리</label>
+                        <select id="document_category" name="document_category">
+                            <option value="software_specification">소프트웨어 명세서</option>
+                            <option value="project_proposal">프로젝트 제안서</option>
+                            <option value="planning_document">기획서</option>
+                            <option value="technical_document">기술 문서</option>
+                            <option value="meeting_notes">회의록</option>
+                            <option value="other">기타</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="document_tags">태그 (쉼표로 구분)</label>
+                        <input type="text" id="document_tags" name="document_tags" placeholder="예: 프로젝트, 개발, AI">
+                    </div>
+                    
+                    <button type="submit" class="btn-upload">문서 업로드 및 학습</button>
+                </form>
+                
+                <div class="learn-text-section">
+                    <h2>텍스트 직접 입력</h2>
+                    <form action="/learn-text" method="post" class="document-form">
+                        <div class="form-group">
+                            <label for="document_text">학습할 텍스트</label>
+                            <textarea id="document_text" name="document_text" rows="10" required placeholder="학습시킬 텍스트를 입력하세요"></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="text_category">문서 카테고리</label>
+                            <select id="text_category" name="text_category">
+                                <option value="software_specification">소프트웨어 명세서</option>
+                                <option value="project_proposal">프로젝트 제안서</option>
+                                <option value="planning_document">기획서</option>
+                                <option value="technical_document">기술 문서</option>
+                                <option value="meeting_notes">회의록</option>
+                                <option value="other">기타</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="text_tags">태그 (쉼표로 구분)</label>
+                            <input type="text" id="text_tags" name="text_tags" placeholder="예: 프로젝트, 개발, AI">
+                        </div>
+                        
+                        <button type="submit" class="btn-upload">텍스트 학습</button>
+                    </form>
+                </div>
+                
+                <div class="management-section">
+                    <h2>학습 데이터 관리</h2>
+                    <form action="/clear-learned-data" method="post" onsubmit="return confirm('정말로 모든 학습 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.');">
+                        <button type="submit" class="btn-danger">모든 학습 데이터 삭제</button>
+                    </form>
+                </div>
+                
+                <div class="navigation-links">
+                    <a href="/" class="btn-back">메인 페이지로 돌아가기</a>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>&copy; 2023 구글 드라이브 문서 자동 생성기</p>
+        </footer>
+    </div>
+    
+    <script src="{{ url_for('static', path='js/script.js') }}"></script>
+</body>
+</html> 
