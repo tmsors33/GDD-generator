@@ -220,6 +220,8 @@ async def upload_document(
     document_tags: Optional[str] = Form(None)
 ):
     """문서 파일 업로드 및 학습"""
+    print(f"업로드 시작: {document_file.filename}, 카테고리: {document_category}")
+    
     # 문서 학습기 로드
     document_learner = get_document_learner()
     if document_learner is None:
@@ -234,39 +236,44 @@ async def upload_document(
         if document_tags:
             metadata["tags"] = document_tags
         
+        print(f"메타데이터 생성: {metadata}")
+        
         # 파일 임시 저장
         try:
             with open(file_path, "wb") as temp_file:
                 content = await document_file.read()
                 temp_file.write(content)
+            print(f"파일 임시 저장 완료: {file_path}")
         except Exception as e:
+            print(f"파일 저장 오류: {str(e)}")
             raise HTTPException(status_code=500, detail=f"파일 저장 중 오류 발생: {str(e)}")
         
-        # 문서 학습 시도
+        # 간소화된 처리: 직접 문서 처리 및 벡터 저장소 추가
         try:
-            # 필요한 패키지 확인
-            for package in ["langchain", "unstructured", "pypdf", "docx2txt", "langchain-openai", "chromadb"]:
-                try:
-                    importlib.import_module(package.replace("-", "_"))
-                except ImportError:
-                    raise HTTPException(status_code=500, detail=f"필요한 패키지가 설치되어 있지 않습니다: {package}")
-            
+            # 단순화된 절차로 진행
+            print(f"문서 처리 시작...")
             documents = document_learner.process_document(file_path, metadata)
-            if not documents:
+            print(f"문서 처리 완료: {len(documents)} 청크")
+            
+            if not documents or len(documents) == 0:
                 raise HTTPException(status_code=500, detail="문서에서 처리할 텍스트를 찾을 수 없습니다.")
-                
+            
+            print(f"벡터 저장소에 추가 시작...")
             success = document_learner.add_documents(documents)
+            print(f"벡터 저장소 추가 결과: {success}")
+            
             if not success:
                 raise HTTPException(status_code=500, detail="벡터 저장소에 문서 추가 중 오류가 발생했습니다.")
-        except ImportError as e:
-            raise HTTPException(status_code=500, detail=f"필요한 패키지가 설치되어 있지 않습니다: {str(e)}")
         except Exception as e:
+            print(f"문서 처리 중 오류: {str(e)}")
             raise HTTPException(status_code=500, detail=f"문서 처리 중 오류 발생: {str(e)}")
         finally:
             # 임시 파일 삭제
             if os.path.exists(file_path):
                 os.remove(file_path)
+                print(f"임시 파일 삭제 완료: {file_path}")
         
+        print(f"문서 업로드 처리 완료")
         return templates.TemplateResponse(
             "learn_success.html", 
             {
