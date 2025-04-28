@@ -146,7 +146,14 @@ async def callback(request: Request, code: Optional[str] = None):
     with open(TOKEN_FILE, "w") as token:
         token.write(credentials.to_json())
     
-    return RedirectResponse("/")
+    # 현재 호스트 기반 리다이렉트 URL 생성
+    # 요청의 base_url 가져오기 (scheme + server + port)
+    base_url = str(request.base_url)
+    # URL의 마지막 슬래시 제거
+    if base_url.endswith('/'):
+        base_url = base_url[:-1]
+    
+    return RedirectResponse(f"{base_url}/")
 
 @app.post("/create-document")
 async def create_document(
@@ -351,11 +358,17 @@ async def login_status():
     return JSONResponse({"loggedIn": credentials is not None})
 
 @app.get("/logout")
-async def logout():
+async def logout(request: Request):
     """로그아웃 및 토큰 삭제"""
     if os.path.exists(TOKEN_FILE):
         os.remove(TOKEN_FILE)
-    return RedirectResponse("/")
+    
+    # 현재 호스트 기반 리다이렉트 URL 생성
+    base_url = str(request.base_url)
+    if base_url.endswith('/'):
+        base_url = base_url[:-1]
+    
+    return RedirectResponse(f"{base_url}/")
 
 if __name__ == "__main__":
     # 애플리케이션 실행
