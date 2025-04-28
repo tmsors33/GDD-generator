@@ -2,6 +2,7 @@
 .env
 token.json
 .env.production
+.env.vercel
 
 # 벡터 데이터베이스
 chroma_db/
