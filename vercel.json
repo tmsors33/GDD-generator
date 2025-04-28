@@ -15,12 +15,6 @@
   "env": {
     "PYTHONUNBUFFERED": "1"
   },
-  "functions": {
-    "app.py": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  },
   "excludeFiles": [
     "chroma_db/**",
     "__pycache__/**",
