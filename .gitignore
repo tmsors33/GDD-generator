@@ -1,6 +1,7 @@
 # 환경 변수 및 보안 정보
 .env
 token.json
+.env.production
 
 # 벡터 데이터베이스
 chroma_db/
@@ -21,3 +22,4 @@ Thumbs.db
 
 # 임시 파일
 temp_* 
+.vercel
